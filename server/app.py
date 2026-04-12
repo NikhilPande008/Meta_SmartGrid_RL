@@ -5,20 +5,21 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure root is in path
-repo_root = os.path.dirname(os.path.abspath(__file__))
+# FIX: Pathing for subfolder. We need to look one level UP to find meta_smartgrid_rl
+current_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.dirname(current_dir)
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
 try:
     from meta_smartgrid_rl.env import SustainableGridEnv
 except ImportError:
+    # Fallback for Docker
     sys.path.append("/app")
     from meta_smartgrid_rl.env import SustainableGridEnv
 
 app = FastAPI()
 
-# Add CORS so the validator doesn't get blocked
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,14 +53,17 @@ async def step(action_data: dict):
         "info": info
     }
 
-if __name__ == "__main__":
-    # 7860 is the mandatory Hugging Face port
+# FIX: Added explicit main() function as requested by the validator
+def main():
     port = int(os.getenv("PORT", 7860))
-    # proxy_headers=True is critical for passing through the HF load balancer
     uvicorn.run(
-        app, 
+        "server.app:app", 
         host="0.0.0.0", 
         port=port, 
         proxy_headers=True, 
         forwarded_allow_ips="*"
     )
+
+# FIX: Standard boilerplate to make the function callable
+if __name__ == "__main__":
+    main()
