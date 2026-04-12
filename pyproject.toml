@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meta_smartgrid_rl"
+version = "1.0.0"
+description = "Smart Grid optimization environment for Reinforcement Learning"
+authors = [
+    {name = "Nikhil Pande"}
+]
+dependencies = [
+    "gymnasium",
+    "numpy",
+    "torch",
+    "fastapi",
+    "uvicorn"
+]
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["meta_smartgrid_rl*"]
