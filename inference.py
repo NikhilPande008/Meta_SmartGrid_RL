@@ -1,6 +1,7 @@
 import sys
 import os
 import numpy as np
+import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,13 +18,12 @@ except ImportError:
     try:
         from meta_smartgrid_rl.env import SustainableGridEnv
     except ImportError:
-        # Fallback if the folder is in the same directory
         try:
             from env import SustainableGridEnv
         except ImportError:
             pass
 
-# 3. FASTAPI APP (Required by the "Internal" server)
+# 3. FASTAPI INSTANCE (Exporting 'app' for the Internal Server)
 app = FastAPI()
 
 app.add_middleware(
@@ -33,68 +33,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global environment instance
+# Initialize env globally
 try:
     env = SustainableGridEnv()
-except Exception:
+except:
     env = None
 
-# Track metrics for the [END] block
-stats = {"total_reward": 0.0, "steps": 0, "task": "smartgrid_balancing"}
-
-@app.on_event("startup")
-async def startup_event():
-    print(f"[START] task={stats['task']}", flush=True)
-
+# API ENDPOINTS
 @app.get("/")
 async def health():
     return {"status": "alive"}
 
 @app.post("/reset")
 async def reset():
-    if env is None: return {"error": "Env not found"}
     obs, info = env.reset()
-    # Reset local stats for a new run
-    stats["total_reward"] = 0.0
-    stats["steps"] = 0
-    return {
-        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
-        "info": info
-    }
+    return {"observation": obs.tolist() if hasattr(obs, 'tolist') else obs, "info": info}
 
 @app.post("/step")
 async def step(action_data: dict):
-    if env is None: return {"error": "Env not found"}
-    
     action = action_data.get("action", 0)
     obs, reward, terminated, truncated, info = env.step(action)
-    
-    # Update Stats
-    stats["steps"] += 1
-    stats["total_reward"] += reward
-    done = terminated or truncated
-
-    # REQUIRED STRUCTURED LOGGING
-    print(f"[STEP] step={stats['steps']} reward={reward:.4f}", flush=True)
-    
-    if done:
-        score = max(0.0, min(1.0, stats["total_reward"] / 100.0))
-        print(f"[END] task={stats['task']} score={score:.4f} steps={stats['steps']}", flush=True)
-
     return {
         "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
         "reward": float(reward),
-        "done": bool(done),
+        "done": bool(terminated or truncated),
         "info": info
     }
 
-# 4. MAIN FUNCTION (Required by validator process)
+# 4. THE VALIDATOR RUNNER (The fix for "No structured output")
 def main():
     """
-    The script must exist and be callable, but since the platform 
-    is running uvicorn on 'inference:app', we just print a readiness signal.
+    This function runs the actual evaluation loop and prints the 
+    exact strings the validator's parser is looking for.
     """
-    print("Inference module loaded. App attribute exported.", flush=True)
+    if env is None:
+        print("Environment not found, exiting.")
+        return
 
+    task_name = "smartgrid_balancing"
+    
+    # START BLOCK
+    print(f"[START] task={task_name}", flush=True)
+
+    obs, info = env.reset()
+    total_reward = 0
+    steps = 0
+    max_steps = 100 # Adjust based on hackathon requirements
+
+    for i in range(1, max_steps + 1):
+        # Sample an action (Replace with your model prediction if available)
+        action = env.action_space.sample() 
+        
+        obs, reward, terminated, truncated, info = env.step(action)
+        total_reward += reward
+        steps = i
+        
+        # STEP BLOCK
+        print(f"[STEP] step={steps} reward={reward:.4f}", flush=True)
+
+        if terminated or truncated:
+            break
+
+    # END BLOCK
+    # Normalizing score: Adjust the divisor (100.0) to match your env's scale
+    score = max(0.0, min(1.0, total_reward / 100.0))
+    print(f"[END] task={task_name} score={score:.4f} steps={steps}", flush=True)
+
+# 5. EXECUTION LOGIC
 if __name__ == "__main__":
+    # If the platform runs 'python inference.py', this executes the loop
+    # If the platform runs 'uvicorn inference:app', this is ignored, but 'app' is still exported
     main()
