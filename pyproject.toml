@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meta_smartgrid_rl"
-version = "1.0.0"
+version = "0.1.0"
 description = "Smart Grid optimization environment for Reinforcement Learning"
 authors = [
     {name = "Nikhil Pande"}
@@ -14,9 +14,14 @@ dependencies = [
     "numpy",
     "torch",
     "fastapi",
-    "uvicorn"
+    "uvicorn",
+    "openenv-core>=0.2.0"  # This fixes the missing dependency error
 ]
 requires-python = ">=3.10"
+
+# This fixes the "Missing [project.scripts] server entry point" error
+[project.scripts]
+server = "inference:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
