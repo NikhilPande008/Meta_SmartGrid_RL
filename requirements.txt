@@ -8,3 +8,6 @@ openai
 streamlit
 fastapi
 uvicorn
+altair
+pandas
+streamlit
