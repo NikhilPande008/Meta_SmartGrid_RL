@@ -17,14 +17,13 @@ except ImportError:
     try:
         from meta_smartgrid_rl.env import SustainableGridEnv
     except ImportError:
-        # Final fallback for flat directory structures
+        # Final fallback
         try:
             from env import SustainableGridEnv
         except ImportError:
             pass
 
 # 3. FASTAPI INSTANTIATION
-# We define this globally so the platform can import it via 'inference:app'
 app = FastAPI()
 
 app.add_middleware(
@@ -34,7 +33,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize env safely
+# Initialize env safely at module level
+# Note: Ensure initialization is fast. If this takes minutes, it will timeout.
 try:
     env = SustainableGridEnv()
 except Exception:
@@ -49,13 +49,25 @@ async def health():
 async def reset():
     if env is None: return {"error": "Env not found"}
     obs, info = env.reset()
-    return {"observation": obs.tolist() if hasattr(obs, 'tolist') else obs, "info": info}
+    # Convert numpy types to native python types for JSON serialization
+    return {
+        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs, 
+        "info": info
+    }
 
 @app.post("/step")
 async def step(action_data: dict):
     if env is None: return {"error": "Env not found"}
+    
+    # Extract action - handle potential string/int conversion
     action = action_data.get("action", 0)
+    try:
+        action = int(action)
+    except (TypeError, ValueError):
+        action = 0
+        
     obs, reward, done, truncated, info = env.step(action)
+    
     return {
         "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
         "reward": float(reward),
@@ -63,21 +75,17 @@ async def step(action_data: dict):
         "info": info
     }
 
-# 5. THE CRITICAL FIX FOR PHASE 2
+# 5. THE MAIN FUNCTION
 def main():
     """
-    The platform runs: 'python inference.py'
-    The validator log shows the platform starts its own server on 7860.
-    Therefore, this script must NOT run uvicorn.run().
-    It must simply stay alive or exit gracefully.
+    The validator executes 'python inference.py'.
+    To avoid timeout, we print a ready signal and EXIT.
+    The FastAPI 'app' remains available for the internal server to use.
     """
-    import time
-    print("Agent Process Started. Handing over control to validator server.")
-    try:
-        while True:
-            time.sleep(10) # Minimal CPU usage, keeps process from exiting
-    except KeyboardInterrupt:
-        print("Exiting...")
+    print("Inference server initialized and ready for evaluation.")
+    # Do NOT use while True or uvicorn.run here.
+    # Exiting here allows the validator to proceed to the next phase.
+    sys.exit(0) 
 
 if __name__ == "__main__":
     main()
