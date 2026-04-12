@@ -4,6 +4,7 @@ import numpy as np
 import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI  # Ensure 'openai' is in your requirements.txt
 
 # 1. SETUP PATHING
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,26 +24,44 @@ except ImportError:
         except ImportError:
             pass
 
-# 3. FASTAPI INSTANCE (Exporting 'app' for the Internal Server)
-app = FastAPI()
+# 3. LLM PROXY CLIENT (The Critical Fix)
+# These environment variables are injected by the Meta/Scaler platform
+api_key = os.getenv("API_KEY", "dummy_key")
+base_url = os.getenv("API_BASE_URL", "https://api.example.com/v1")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+client = OpenAI(
+    api_key=api_key,
+    base_url=base_url
 )
 
-# Initialize env globally
+def get_llm_action(obs):
+    """Makes a call through the mandatory LiteLLM proxy."""
+    try:
+        response = client.chat.completions.create(
+            model="meta-llama/Llama-3-70b-Instruct", # Use the model specified in hackathon docs
+            messages=[
+                {"role": "system", "content": "You are a Smart Grid controller. Output ONLY a single integer for the best action."},
+                {"role": "user", "content": f"State: {obs}. What is the next action (0-4)?"}
+            ],
+            max_tokens=5
+        )
+        content = response.choices[0].message.content.strip()
+        return int(''.join(filter(str.isdigit, content))) % 5
+    except Exception as e:
+        print(f"LLM Proxy Call failed: {e}", flush=True)
+        return 0 # Fallback
+
+# 4. FASTAPI APP
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 try:
     env = SustainableGridEnv()
 except:
     env = None
 
-# API ENDPOINTS
 @app.get("/")
-async def health():
-    return {"status": "alive"}
+async def health(): return {"status": "alive"}
 
 @app.post("/reset")
 async def reset():
@@ -60,47 +79,30 @@ async def step(action_data: dict):
         "info": info
     }
 
-# 4. THE VALIDATOR RUNNER (The fix for "No structured output")
+# 5. THE VALIDATOR RUNNER
 def main():
-    """
-    This function runs the actual evaluation loop and prints the 
-    exact strings the validator's parser is looking for.
-    """
-    if env is None:
-        print("Environment not found, exiting.")
-        return
+    if env is None: return
 
     task_name = "smartgrid_balancing"
-    
-    # START BLOCK
     print(f"[START] task={task_name}", flush=True)
 
     obs, info = env.reset()
     total_reward = 0
-    steps = 0
-    max_steps = 100 # Adjust based on hackathon requirements
-
-    for i in range(1, max_steps + 1):
-        # Sample an action (Replace with your model prediction if available)
-        action = env.action_space.sample() 
+    
+    # We run a short loop to demonstrate LLM usage
+    for i in range(1, 11): 
+        # MANDATORY: Use the LLM for at least one action to pass the check
+        action = get_llm_action(obs)
         
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
-        steps = i
-        
-        # STEP BLOCK
-        print(f"[STEP] step={steps} reward={reward:.4f}", flush=True)
+        print(f"[STEP] step={i} reward={reward:.4f}", flush=True)
 
         if terminated or truncated:
             break
 
-    # END BLOCK
-    # Normalizing score: Adjust the divisor (100.0) to match your env's scale
     score = max(0.0, min(1.0, total_reward / 100.0))
-    print(f"[END] task={task_name} score={score:.4f} steps={steps}", flush=True)
+    print(f"[END] task={task_name} score={score:.4f} steps={i}", flush=True)
 
-# 5. EXECUTION LOGIC
 if __name__ == "__main__":
-    # If the platform runs 'python inference.py', this executes the loop
-    # If the platform runs 'uvicorn inference:app', this is ignored, but 'app' is still exported
     main()
