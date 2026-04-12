@@ -1,8 +1,6 @@
 import sys
 import os
 import numpy as np
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 # 1. SETUP PATHING
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -14,78 +12,55 @@ try:
     from meta_smartgrid_rl.env import SustainableGridEnv
 except ImportError:
     sys.path.append("/app")
-    try:
-        from meta_smartgrid_rl.env import SustainableGridEnv
-    except ImportError:
-        # Final fallback
-        try:
-            from env import SustainableGridEnv
-        except ImportError:
-            pass
+    from meta_smartgrid_rl.env import SustainableGridEnv
 
-# 3. FASTAPI INSTANTIATION
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize env safely at module level
-# Note: Ensure initialization is fast. If this takes minutes, it will timeout.
-try:
-    env = SustainableGridEnv()
-except Exception:
-    env = None
-
-# 4. ENDPOINTS
-@app.get("/")
-async def health():
-    return {"status": "alive"}
-
-@app.post("/reset")
-async def reset():
-    if env is None: return {"error": "Env not found"}
-    obs, info = env.reset()
-    # Convert numpy types to native python types for JSON serialization
-    return {
-        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs, 
-        "info": info
-    }
-
-@app.post("/step")
-async def step(action_data: dict):
-    if env is None: return {"error": "Env not found"}
-    
-    # Extract action - handle potential string/int conversion
-    action = action_data.get("action", 0)
-    try:
-        action = int(action)
-    except (TypeError, ValueError):
-        action = 0
-        
-    obs, reward, done, truncated, info = env.step(action)
-    
-    return {
-        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
-        "reward": float(reward),
-        "done": bool(done or truncated),
-        "info": info
-    }
-
-# 5. THE MAIN FUNCTION
 def main():
-    """
-    The validator executes 'python inference.py'.
-    To avoid timeout, we print a ready signal and EXIT.
-    The FastAPI 'app' remains available for the internal server to use.
-    """
-    print("Inference server initialized and ready for evaluation.")
-    # Do NOT use while True or uvicorn.run here.
-    # Exiting here allows the validator to proceed to the next phase.
-    sys.exit(0) 
+    # Initialize the environment
+    try:
+        env = SustainableGridEnv()
+    except Exception as e:
+        print(f"Error initializing environment: {e}")
+        return
+
+    # Configuration for the evaluation
+    task_name = "smartgrid_balancing"
+    num_episodes = 1 
+    
+    # 3. STRUCTURED OUTPUT LOOP
+    # The validator looks for these exact strings in stdout
+    print(f"[START] task={task_name}", flush=True)
+
+    obs, info = env.reset()
+    total_reward = 0
+    steps = 0
+    done = False
+
+    while not done:
+        # AGENT LOGIC: 
+        # Replace with your actual model prediction if you have a trained model
+        # For now, using a simple heuristic or random action
+        action = env.action_space.sample() 
+        
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+        total_reward += reward
+        steps += 1
+
+        # Print step details as required
+        print(f"[STEP] step={steps} reward={reward:.4f}", flush=True)
+
+        if steps > 1000: # Safety breakout
+            break
+
+    # 4. FINAL SCORE
+    # The score should typically be a normalized value (0 to 1)
+    # Adjust the 'score' calculation based on your env's max possible reward
+    final_score = max(0.0, min(1.0, total_reward / 100.0)) 
+    
+    print(f"[END] task={task_name} score={final_score:.4f} steps={steps}", flush=True)
+
+    # Clean exit
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
