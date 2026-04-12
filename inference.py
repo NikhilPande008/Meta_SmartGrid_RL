@@ -1,45 +1,45 @@
+import sys
 import os
 import uvicorn
-from fastapi import FastAPI, Body
+import numpy as np
+from fastapi import FastAPI
 from pydantic import BaseModel
-from meta_smartgrid_rl.env import SustainableGridEnv
 
-# --- Initialize App and Env ---
-app = FastAPI(title="Meta SmartGrid OpenEnv API")
+# Ensure Python can find your custom environment
+repo_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(repo_root, "src"))
+
+try:
+    from meta_smartgrid_rl.env import SustainableGridEnv
+except ImportError as e:
+    print(f"Error: Could not find meta_smartgrid_rl. Ensure it is in the 'src' folder. {e}")
+    sys.exit(1)
+
+app = FastAPI()
 env = SustainableGridEnv()
 
-class ActionRequest(BaseModel):
-    action: int
-
-@app.get("/")
-async def health_check():
-    return {"status": "active", "model": os.getenv("MODEL_NAME", "meta-smartgrid-rl")}
-
+@app.post("/")
 @app.post("/reset")
 async def reset():
-    """Handles the openenv_reset_post validation step."""
     obs, info = env.reset()
-    # Convert numpy arrays to lists for JSON serialization
+    # Convert numpy array to list for JSON serialization
     return {
-        "status": "success",
-        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
+        "observation": obs.tolist() if isinstance(obs, np.ndarray) else obs,
         "info": info
     }
 
 @app.post("/step")
-async def step(data: ActionRequest):
-    """Executes a step in the environment."""
-    obs, reward, terminated, truncated, info = env.step(data.action)
+async def step(action_data: dict):
+    action = action_data.get("action", 0)
+    obs, reward, done, truncated, info = env.step(action)
     return {
-        "observation": obs.tolist() if hasattr(obs, 'tolist') else obs,
+        "observation": obs.tolist() if isinstance(obs, np.ndarray) else obs,
         "reward": float(reward),
-        "done": bool(terminated or truncated),
+        "done": bool(done or truncated),
         "info": info
     }
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000)) 
-    if os.getenv("SPACE_ID"): # Detects if running on Hugging Face
-        port = 7860
-    
+    # Use port 7860 for Hugging Face compatibility, 8000 for local
+    port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

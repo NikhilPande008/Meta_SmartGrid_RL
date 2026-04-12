@@ -1,3 +1,5 @@
+fastapi
+uvicorn
 gymnasium
 numpy
 torch
@@ -6,8 +8,5 @@ pytest
 python-dotenv
 openai
 streamlit
-fastapi
-uvicorn
 altair
 pandas
-streamlit
