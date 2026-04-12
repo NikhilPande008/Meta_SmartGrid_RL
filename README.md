@@ -9,4 +9,4 @@ pinned: false
 ---
 
 # Meta SmartGrid RL
-Automated RL Environment for Smart Grid optimization.
+API server for Reinforcement Learning Environment validation.

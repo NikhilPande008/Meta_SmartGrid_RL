@@ -3,26 +3,39 @@ import os
 import uvicorn
 import numpy as np
 from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure Python can find your custom environment
+# Ensure root is in path
 repo_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(repo_root, "src"))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
 try:
     from meta_smartgrid_rl.env import SustainableGridEnv
-except ImportError as e:
-    print(f"Error: Could not find meta_smartgrid_rl. Ensure it is in the 'src' folder. {e}")
-    sys.exit(1)
+except ImportError:
+    sys.path.append("/app")
+    from meta_smartgrid_rl.env import SustainableGridEnv
 
 app = FastAPI()
+
+# Add CORS so the validator doesn't get blocked
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 env = SustainableGridEnv()
+
+@app.get("/")
+async def health():
+    return {"status": "alive", "message": "SmartGrid API is Running"}
 
 @app.post("/")
 @app.post("/reset")
 async def reset():
     obs, info = env.reset()
-    # Convert numpy array to list for JSON serialization
     return {
         "observation": obs.tolist() if isinstance(obs, np.ndarray) else obs,
         "info": info
@@ -40,6 +53,13 @@ async def step(action_data: dict):
     }
 
 if __name__ == "__main__":
-    # Use port 7860 for Hugging Face compatibility, 8000 for local
-    port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # 7860 is the mandatory Hugging Face port
+    port = int(os.getenv("PORT", 7860))
+    # proxy_headers=True is critical for passing through the HF load balancer
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port, 
+        proxy_headers=True, 
+        forwarded_allow_ips="*"
+    )
