@@ -1,0 +1,21 @@
+# OpenEnv Environment Configuration
+name: meta_smartgrid_rl
+version: "1.0.0"
+entry_point: inference:app
+type: "gymnasium"
+
+# Definition of the observation and action space
+env_config:
+  observation_space:
+    type: "Box"
+    shape: [4]
+    low: [0.0, 0.0, 0.0, 0.0]
+    high: [1.0, 1.0, 1.0, 24.0]
+  action_space:
+    type: "Discrete"
+    n: 3
+
+# Metadata for the Scaler dashboard
+metadata:
+  description: "Smart Grid optimization environment for Reinforcement Learning."
+  author: "Nikhil Pande"
