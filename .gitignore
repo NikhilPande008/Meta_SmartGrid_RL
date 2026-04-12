@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+.DS_Store
+*.png
+assets/LLM Score.png
+results_plot.png

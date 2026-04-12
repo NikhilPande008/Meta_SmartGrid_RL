@@ -1,0 +1,10 @@
+gymnasium
+numpy
+torch
+matplotlib
+pytest
+python-dotenv
+openai
+streamlit
+fastapi
+uvicorn
