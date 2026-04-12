@@ -1,17 +1,9 @@
 ---
 title: Meta SmartGrid RL
 emoji: 🚀
-colorFrom: red
-colorTo: red
+colorFrom: green
+colorTo: blue
 sdk: docker
-app_port: 8501
-tags:
-- streamlit
+app_port: 7860
 pinned: false
-short_description: Streamlit template space
 ---
-
-# Welcome to Streamlit!
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
